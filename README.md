@@ -1,70 +1,103 @@
-# Getting Started with Create React App
+### 개요
+- `Github Actions`를 활용한 `AWS S3 CI` 테스트 레포지토리입니다.
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+### AWS S3 Settings
 
-## Available Scripts
+- `**AWS` → `S3` → `버킷 만들기` → `버킷 속성` → `정적 웹 사이트 호스팅`
+    - **정적 웹 사이트 호스팅** : 활성화
+    - **호스팅 유형** : 정적 웹 사이트 호스팅
+    - **인덱스 문서** : `index.html`
+    
+- **버킷 정책 변경**
+    - `S3`에 올라간 `React 정적 파일`을 웹에서 액세스 할 수 있게 버킷 정책을 변경해주고 추가
+    - `권한` → `퍼블릭 액세스 차단(버킷 설정) : 비활성화` → `버킷 정책 편집` → `Bucket-Name 변경`
 
-In the project directory, you can run:
+```jsx
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PublicReadGetObject",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::{Bucket-Name}/*"
+            ]
+        }
+    ]
+}
+```
 
-### `npm start`
+- **AWS 리전(Region)** : AWS 인프라를 지리적으로 나누어 배포한 것을 의미합니다.
+    - 사용자와 리전이 가까울수록 네트워크 지연을 최소화할 수 있습니다
+    - 대한민국 리전 : `아시아 태평양(서울) ap-northeast-2`
+    
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+### **IAM(Identity and Access Management)**
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+- `AWS` → `IAM` → `사용자` → `AmazonS3FullAccess : check`
+- AWS 리소스에 대한 액세스를 안전하게 제어할 수 있는 웹 서비스입니다
+- IAM을 사용하여 리소스를 사용하도록 인증 및 권한 부여된 대상을 제어
 
-### `npm test`
+### GitHub Action Settings
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+![image](https://user-images.githubusercontent.com/106054507/191897690-d15242f1-c17d-4a35-8e66-42204ea61a44.png)
 
-### `npm run build`
+```jsx
+name: Node.js CI
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+jobs:
+  build:
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+    runs-on: ubuntu-latest
 
-### `npm run eject`
+    strategy:
+      matrix:
+        node-version: [14.x, 16.x, 18.x]
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+    steps:
+    - uses: actions/checkout@v3
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    - run: npm ci
+    - run: npm run build --if-present
+    - run: npm test
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+    - uses: awact/s3-action@master
+      with:
+        args: --acl public-read --follow-symlinks --delete
+      env:
+        SOURCE_DIR: './public'
+        AWS_REGION: 'us-east-1'
+        AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+- `name` : `work-flow`의 이름
+- `on.push.branch : [main]` : `main`에 `source code`를 `push` 를 하면 `jobs` 커맨드 실행.
+- `jobs.build : run-on: ubuntu-latest` : `ubuntu`에서 실행을 의미
+- `strategy.matrix.node-version` : 버전 정보
+- `run` : 어떻게 동작할 것인지를 의미
+    - `--if present` : 빌드 스크립트가 있을 때만 실행
+- `env.SOURCE_DIR` : 배포할 소스 파일 위치
+- `AWS_REGION` : 설정한 AWS 리전 ( 한국은 `ap-northeast-2` )
+- `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` 등은 `Settings → Secrets → Actions → new repository secret` 설정 권장
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+### 참고문서
+- [Inflearn 강의](https://www.inflearn.com/course/%EB%94%B0%EB%9D%BC%ED%95%98%EB%8A%94-%EB%A6%AC%EC%95%A1%ED%8A%B8/)
+- [S3 버캣 정책 변경 - 아마존 링크](https://docs.aws.amazon.com/AmazonS3/latest/userguide/WebsiteAccessPermissionsReqd.html)
+- [GitHub Actions .yml 파일 아마존 연결 방법](https://github.com/awact/s3-action)
